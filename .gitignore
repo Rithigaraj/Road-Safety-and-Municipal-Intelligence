@@ -3,10 +3,8 @@ __pycache__/
 backend/data/road_safety.db
 backend/data/uploads/*
 !backend/data/uploads/.gitkeep
-backend/data/samples/*.jpg
 dashboard/node_modules/
 dashboard/dist/
 .vite/
 *.log
 .env
-backend/data/models/
