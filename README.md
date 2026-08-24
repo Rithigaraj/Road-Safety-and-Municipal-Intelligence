@@ -144,3 +144,44 @@ priority = 0.30 * class_risk        (potholes > water leaks > cracks > …)
          + 0.12 * recency           (decays over one week)
 → bucketed into P1 (fix within 24h) … P4 (fix within 7 days)
 ```
+Machine Learning in this project
+The trained model
+Random Forest classifier (scikit-learn) — 220 trees — classifies image patches into 8 classes: pothole, road_crack, garbage, water_leakage, broken_streetlight, damaged_traffic_sign, blocked_drainage + background.
+
+Accuracy: 98.3% cross-validation / 99.2% test (3,030 tiles, 46 features)
+
+Training pipeline (scripts/train_classifier.py)
+Synthetic dataset — randomized variants of the sample generators (zoom 0.85–1.25×, random translation, horizontal flips, brightness/contrast jitter, Gaussian noise)
+Labeling — each 128×128 tile labeled by overlap fraction with the mapped defect box; ≥45% overlap = positive, ambiguous tiles dropped
+Training — stratified split, 3-fold CV, saved via joblib
+Feature engineering (app/ml/features.py) — 46 features per tile
+Group	Features	Catches
+HSV histograms (12+8+8 bins)	color distribution	garbage colors, sign green
+Intensity moments	mean/std of gray, RGB means	dark holes
+Blue-minus-red index	water signature	leakage puddles
+Green dominance	vegetation/sign color	traffic signs
+Gradient magnitude stats + edge density	texture/edges	cracks
+Dark/bright fractions	shadow & gloss	streetlights at night
+Quadrant darkness layout	spatial position of mass	drainage debris
+Inference pipeline (app/ml/ml_detector.py)
+image → sliding window (128px, stride 64 → ~49 tiles)
+      → feature extraction per tile
+      → RF predict_proba
+      → per-tile argmax voting (background suppresses noise)
+      → strong-tile gate (p ≥ 0.66)
+      → connected-component merging → bounding boxes
+      → conf = 0.55·max_prob + 0.45·mean_prob
+Each detected box also gets real visual evidence extracted (contrast, dark_frac, density, elongation) that feeds the downstream severity model.
+
+Where ML sits vs rules
+Component	Type
+Detection	✅ Trained ML (RandomForest) — swappable to YOLOv8 via env var
+Severity grading	Rule-based weighted fusion (+ size from camera geometry)
+Priority P1–P4	Linear scoring model with location/recency weights
+Fix verification	Detector re-run + threshold decision
+Forecasting	Heuristic moving average
+Why RandomForest and not deep learning?
+Trains on CPU in seconds; no GPU/dataset collection needed
+5 MB artifact ships in the repo — clone and run immediately
+Interpretable per-feature importances
+Upgrade path built-in: DETECTOR_BACKEND=yolo swaps in a real CNN detector through the same detect() interface — nothing else changes
